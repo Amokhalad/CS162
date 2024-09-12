@@ -1,0 +1,16 @@
+\contentsline {lecturesection}{\numberline {1}Introduction}{1}{lecturesection.1}%
+\contentsline {subsection}{\numberline {1.1}What is an Operating System?}{1}{subsection.2}%
+\contentsline {subsection}{\numberline {1.2}Operating System Evaluation}{2}{subsection.11}%
+\contentsline {lecturesection}{\numberline {2}Four Fundamental OS Concepts}{3}{lecturesection.17}%
+\contentsline {subsection}{\numberline {2.1}The Process Abstraction}{3}{subsection.19}%
+\contentsline {subsection}{\numberline {2.2}Dual-Mode Operation}{3}{subsection.22}%
+\contentsline {subsubsection}{\numberline {2.2.1}Privileged Instructions}{4}{subsubsection.27}%
+\contentsline {subsubsection}{\numberline {2.2.2}Memory Protection}{4}{subsubsection.28}%
+\contentsline {subsubsection}{\numberline {2.2.3}Timer Interrupts}{4}{subsubsection.29}%
+\contentsline {subsection}{\numberline {2.3}Types of Mode Transfers}{5}{subsection.30}%
+\contentsline {subsubsection}{\numberline {2.3.1}User to Kernel Mode Transfer}{5}{subsubsection.31}%
+\contentsline {subsubsection}{\numberline {2.3.2}Kernel to User Mode Transfer}{5}{subsubsection.35}%
+\contentsline {lecturesection}{\numberline {3}Abstractions 1: Threads and Processess A quick, programmer's viewpoint}{6}{lecturesection.41}%
+\contentsline {lecturesection}{\numberline {4}Abstractions 2: Processes, Files and I/O}{7}{lecturesection.43}%
+\contentsline {subsubsection}{\numberline {4.0.1}Creating Processes}{7}{subsubsection.47}%
+\contentsfinish 

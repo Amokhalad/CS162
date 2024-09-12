@@ -1,0 +1,232 @@
+
+\documentclass{article}
+\usepackage[lecture]{preamble}
+\pagestyle{fancy}
+
+
+% Course Information
+\def\coursenumber{CS 162}
+\def\class{Operating Systems and Systems Programming}
+\def\semester{Fall 2024}
+\def\professor{Ion Stoica}
+\def\author{Mokhalad Aljuboori}
+\def\title{Lecture Notes}
+
+
+% Header and Title
+\setlength{\headheight}{20pt}
+\setlength{\headsep}{10pt}
+\fancyhead[L]{\small{\coursenumber, \semester}}
+\fancyhead[C]{\small{\title}}
+\fancyhead[R]{\small{\author}}
+\fancyfoot[C]{\small{$\thepage$}}
+
+% The \title command gets defined in the .erb template file
+\def\maketitle{
+    \begin{center}
+        {.} \\ [1.5cm]
+        {\Huge \bfseries CS 162: \class} \\[1.5cm]
+        {\LARGE \title} \\[0.5cm]
+        {\Large \author} \\[0.5cm]
+        {\Large \semester~---~\professor} \\[0.5cm]
+    \end{center}
+}
+
+
+\begin{document}
+\maketitle
+\tableofcontents
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%          Chapter 1: Introduction
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\lecture[08/29/24]{Introduction}
+
+\subsection{What is an Operating System?}
+
+An operating system is the layer of software that manages a computer's resources for its users and their applications. In other words, the OS is a specail layer of software that enables the applications to run and share the hardware of a system.
+
+OS provides:
+\begin{enumerate}
+    \item Convenient abstraction of complex hardware devices.
+    \item Protected access to shared resources
+    \item Security and authentication
+    \item Communication amongst logical entities
+\end{enumerate}
+
+How can an operating system run multiple applications? For this, operating systems need to play three roles:
+
+\begin{enumerate}
+    \item \textbf{Referee:} Since the applications share physical resources, the operating system needs to decide which application gets what resources and when. This role is somewhat akin to that of a patient kindergarten teacher. It balances needs, separates conflicts, and facilitates sharing.
+    \item \textbf{Illusionist:} OS's needs to provide an abstraction of physical hardware to simplify application design. They need to provide the illusion of nearly infinite memory. Also provide the illusion that each program has the computer's processors entirely to itself. These illusions let you write applications independently of the amount of physical memory on the system or the physical number of processors.
+    \item \textbf{Glue:} OS's needs to provide a set of common services that facilitate sharing among applications. Many OS's provide provide a common user interface routines so applications can have the same ``look and feel``. Most importantly, the OS provides a layer separating applications from hardware I/O devices like monitors, keyboards, and mouses so applications can be written independently of the specific hardware.
+\end{enumerate}
+
+\begin{definition}[Process]
+    A process is an execution enviornment provided by the OS to run a program. A process has its own memory space, its own file descriptors, and its own CPU time. The OS can run multiple processes at the same time, switching between them to give the illusion that they are all running concurrently.
+
+    A process consists of:
+    \begin{itemize}
+        \item Address space
+        \item One or more threads of control executing in that address space.
+        \item Additional system states.
+    \end{itemize}
+
+
+    The OS provides access protection between processes. Process 2 cannot access the resources and memory used by Process 1 and vice verse.
+
+    Note that a processo\textbf{r} can only run one process at a time. So how could it possible run multiple process? The OS uses a technique called context switching, switching between executing different process very fast.
+\end{definition}
+
+\subsection{Operating System Evaluation}
+
+Having defined what an operating system does, how should we choose among alternative designs? We discuss several desireable criteria for operating systems:
+
+\begin{enumerate}
+    \item \textbf{Reliability and Availability:} Does the operating system do what you want?
+    \item \textbf{Security:}  Can the operating system be corrupted by an attacker?
+    \item \textbf{Portability:} Is the operating system easy to move to new hardware platforms?
+    \item \textbf{Performance:} Is the user interface responsive, or does the operating system impose too much overhead?
+    \item \textbf{Adoption:} How many other users are there for this operating system?
+\end{enumerate}
+
+In many cases, tradeoffs between these criteria are inevitable --- improving a system along one dimension may hurt it along another.
+
+\newpage
+
+\lecture[09/03/24]{Four Fundamental OS Concepts}
+
+
+\begin{definition}[Kernel]
+    Implementing protection is the job of the \textit{operating system kernel.} The kernel is the lowest level of software running on the system, and has full access to all of the machine hardware. Therefore the kernel is necessarily \textit{trusted} to do anything with the hardware. Everything else --- that is, the untrusted software running on the system --- is run in a restricted environment with less than complete access to the full power of the hardware.
+\end{definition}
+\subsection{The Process Abstraction}
+\begin{definition}[Process]
+    You can think of a process as an instance of a program, same way that an object is an instance of a class in OOP.\@ Each process has it's own memory space for program's data, stack, and heap. The process is the abstraction for protected execution provided by the operating system kernel.
+\end{definition}
+A process needs permission from the kernel before accessing the memory of any other process, before reading or writing to the disk, before changing hardware settings, and so forth.
+
+Applications/programs need to run on the processor with all potentially dangerous operations \textbf{disabled}. To make this work, hardware needs to support \textbf{dual-mode operation}. See next section.
+
+The OS keeps track of the various process on the computer using a data structure called the \textit{\textbf{process control block}}.
+
+\begin{definition}[Process Control Block (PCB)]
+    The PCB is a data structure that stores all the information the OS needs about a particular process, including:
+    \begin{itemize}
+        \item Status (Running, ready, blocked, \ldots)
+        \item Where its stored in memory,
+        \item Where it's executable image resides on disk,
+        \item Which user asked it to start executing,
+        \item What privileges the process has,
+        \item and so forth.
+    \end{itemize}
+
+\end{definition}
+
+
+\subsection{Dual-Mode Operation}
+How does the operating system kernel prevent a process from harming other processes or the operating system itself? What prevents a process from overwriting another process's data structures, or even overwriting the operating system image stored on disk?
+
+It's done in hardware, and it's called \textbf{\textit{dual-mode operation}}. Most instructions are perfectly safe, such as adding two registers together and storing the result in a third register. But some instructions are dangerous, such as reading from or writing to disk, or changing the memory protection settings. The hardware must be able to distinguish between these two types of instructions.
+
+\begin{definition}[Dual-Mode Operation]
+    A single bit in the processor status register is used to signify the current mode of the processor. The mode bit is modified by some instructions. When set to 1, the processor is in \textbf{kernel mode}. When set to 0, the processor is in \textbf{user mode}.
+
+    In \textbf{user mode}, the processor checks each instruction before executing it to verify that it is permitted to be performed by that process. We'll describe the specific checks soon.
+
+    In \textbf{kernel mode}, the OS executes the instruction with protection checks disabled.
+\end{definition}
+What hardware is needed to le the operating system kernel protect applications and users from one another, yet also let user code run directly on the processor? At a minimum, the hardware must support the following three things:
+
+\begin{enumerate}
+    \item \textbf{Privileged Instructions.} All potentially unsafe instructions are prohibited when executing in user mode.
+    \item \textbf{Memory Protection.} All memory accesses outside of a process's valid memory region are prohibited when executing in user mode.
+    \item \textbf{Timer Interrupts.} Regardless of what the process does, the kernel must have a way to periodically regain control from the current process.
+\end{enumerate}
+
+In addition, the hardware must also provide a way to safely transfer control from user mode to kernel mode and back. We'll discuss how this is done in a later section.
+\subsubsection{Privileged Instructions}
+Instructions available only in kernel mode are called \textbf{\textit{privileged instructions}}. The OS kernel must be able to execute these instruction to do its work. Thus, while application programs can use only a subset of the full instruction set, the OS executes in kernel mode with the full power of the hardware.
+
+If an application were to attempt to access restricted memory or attempts to change its privilege level, such actions would cause a \textit{processor exception} to occur. Unlike exceptions in a high-level language, a processor exception causes the processor to transfer control to an exception handler in the OS kernel. Usually, the kernel simply halts the process after a privilege violation.
+
+
+
+\subsubsection{Memory Protection}
+To run an application process, both the operating system and the application must be resident in memory at the same time. Further, other application processes may also be stored in memory. They share the same physical memory.
+
+To make memory sharing safe, the OS must be able to configure the hardware so that each application process \textbf{can read and write only its own memory}, not the memory of the OS or any other application. Otherwise, an application could modify the operating system kernel's code or data to take control of the system or corrupt other applications.
+
+While it may seem that read-only access to memory is harmless, recall that the OS needs to provide both \textbf{security and privacy}. Kernel data structures may contain private user data, and kernel memory may contain sensitive information such as passwords while they are being verified.
+
+
+\subsubsection{Timer Interrupts}
+Process isolation also requires to provide a way for the operating system kernel to periodically regain control of the processor. This is done using a \textbf{timer interrupt}. If the application enters an infinite loop, or if the user simply becomes impatient and wants the system to stop the application, then the operating system must be able to regain control.
+
+The operating system also needs to regain control of the processor in normal operation. To respond to user input in a timely manner while also running other applications, the OS must be able to regain control to switch to a new task. A \textbf{\textit{hardware timer}} device is used to generate periodic interrupts after a specified delay (either in time or after some number of instructions have been executed).
+
+When the timer interrupt occurs, the processor stops executing the current process and transfers control from the user process to the kernel running in kernel mode. The kernel can then decide what to do next, such as switching to a new process or continuing to run the current process.
+
+Resetting the timer is a privileged operation, so only the kernel can reset the timer. This prevents an application from disabling the timer and running forever. A timer or other interrupt does not imply that the program has an error.
+
+\subsection{Types of Mode Transfers}
+The question is now, how to safely transition between executing a user process to executing the kernel and vice versa. This mechanism must be both fast and safe, as it is used frequently (a high performance web server could switch between user and kernel thousands of times per second), leaving no room for error.
+
+We'll discuss first transfers from user to kernel mode, as transitioning in the other direction works by ``undo''-ing the transition from user process into the kernel.
+\subsubsection{User to Kernel Mode Transfer}
+
+There are three reasons for a user process to transfer control to the kernel. Interrupts, processor exceptions, and system calls.
+\begin{enumerate}
+    \item \textbf{Interrupts:} An interrupt is an \textit{\textbf{asynchronous}} signal to the processor that some external event has occurred that may require the processor's attention. As the processor is executing instructions, it checks for whether an interrupt has arrived. If so, it completes or stalls any instructions in progress, and instead of fetching the next instruction, the processor hardware saves the current execution state and starts executing at a specially designated interrupt handler in the kernel. Each different type of interrupt requires its own handler and  there are many types of interrupts.
+    \item \textbf{Processor Exceptions:}
+    \item \textbf{System Calls:} User processes can transition into the operating system kernel voluntarily to request that the kernel perform an operation on the user's behalf. A \textbf{\textit{system call}} is any procedure provided by the kernel that can be called from user level.
+\end{enumerate}
+
+\subsubsection{Kernel to User Mode Transfer}
+
+\hrule
+
+
+Today, the four Fundamental OS Concepts are
+\begin{itemize}
+    \item Thread: Execution context
+          \begin{itemize}
+              \item Fully descrie program state
+          \end{itemize}
+    \item Address Space (with or w/o translation)
+    \item Process: an instance of a running program
+    \item Dual Mode operation / Protection
+\end{itemize}
+
+The buttom line of an OS is \textbf{to run programs}. Here is how they are run:
+\begin{enumerate}
+    \item Write and compile them
+    \item Load instruction and data segments of executable file into memory
+    \item Create stack and heap
+    \item "Transfer control to program"
+    \item Provide services to program
+\end{enumerate}
+
+\newpage
+\lecture[09/05/24]{Abstractions 1: Threads and Processess A quick, programmer's viewpoint}
+
+\begin{definition}[Thread]
+    A single unique execution context. It provides the abstraction of: a single execution sequence that represents a separately schedule task. Threads are mechanism for concurrency.
+\end{definition}
+
+Concurreny is about handling multiple things at once, it's not parallelism. Parallesim is about doing multiple things at once.
+
+\newpage
+\lecture[09/10/24]{Abstractions 2: Processes, Files and I/O}
+There are 3 types of Kernel Mode Transfers.
+
+\begin{enumerate}
+    \item Syscall.
+    \item Interrupts
+    \item Trap or Exception, eg. Seg fault.
+\end{enumerate}
+
+\subsubsection{Creating Processes}
+
+
+
+\end{document}
