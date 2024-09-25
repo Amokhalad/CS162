@@ -134,6 +134,8 @@ It's done in hardware, and it's called \textbf{\textit{dual-mode operation}}. Mo
     In \textbf{user mode}, the processor checks each instruction before executing it to verify that it is permitted to be performed by that process. We'll describe the specific checks soon.
 
     In \textbf{kernel mode}, the OS executes the instruction with protection checks disabled.
+
+    The current privilege level is stored as the low-order bits of the cs register in x86 processors rather than in the processor status word (eflags registers).
 \end{definition}
 What hardware is needed to le the operating system kernel protect applications and users from one another, yet also let user code run directly on the processor? At a minimum, the hardware must support the following three things:
 
@@ -182,6 +184,51 @@ There are three reasons for a user process to transfer control to the kernel. In
 \end{enumerate}
 
 \subsubsection{Kernel to User Mode Transfer}
+Similar to the user to kernel mode transfer, the kernel to user mode transfer has different types of transitions, namely 4 types:
+
+\begin{enumerate}
+    \item \textbf{New Process}: When starting a new process, the following steps are performed:
+          \begin{enumerate}
+              \item Kernel copies the program into memory.
+              \item Sets the program counter to the first instruction of the process
+              \item Sets the stack pointer to the base of the user stack
+              \item And switch   to user mode.
+          \end{enumerate}
+    \item \textbf{Resume after an interrupt, processor exception, or system call}: When the kernel finishes handling the request, it resumes execution of the interrupted process by doing the following:
+          \begin{enumerate}
+              \item Restore the program counter ($PC$) (in the case of a syscall, the instruction after the trap),
+              \item Restoring its registers,
+              \item Changing the mode bit to user mode.
+          \end{enumerate}
+    \item \textbf{Switch to a different process}: When the kernel decides to switch to a different process, as in the case of a timer interrupt, it does the following:
+          \begin{enumerate}
+              \item Since the kernel will eventually resume the old process, the kernel needs to save the process state --- its $PC$, registers, and so forth --- in the \textbf{PCB}.
+              \item The kernel then loads the state of the new process from the PCB.
+              \item and switch to user mode.
+          \end{enumerate}
+    \item \textbf{User-level upcall}: This is a mechanism where the kernel notifies a user-level process of an event, such as the arrival of a signal or the completion of an asynchronous I/O operation. The steps involved are:
+          \begin{enumerate}
+              \item The kernel sets up the user-level stack with the appropriate context for the upcall.
+              \item The kernel sets the program counter to the user-level upcall handler.
+              \item The kernel switches to user mode, allowing the user-level process to handle the event.
+          \end{enumerate}
+\end{enumerate}
+
+\subsection{Implementing Safe Mode Transfer}
+The context switch code must be carefully crafted to ensure that a buggy or malicious user program cannot corrupt the kernel, and it does this by relying on hardware support.
+
+The common sequences of instructions that the operating system provides for entering the kernel from user mode and returning to user mode, at the minimum must provide:
+\begin{itemize}
+    \item \textbf{Limited Entry into the Kernel}: When transferring control from user mode to kernel mode, the kernel must ensure that the entry point into the kernel is one \textit{set up by the kernel}. The user programs should not be able to jump to arbitrary locations in the kernel.
+    \item \textbf{Atomic Changes to Processor State}: Transitions between user and kernel mode must be \textbf{atomic}. That is, the mode, program counter, stack, and memory protection are all changed at the same time, in a way that cannot be interrupted by another process.
+    \item \textbf{Transparent, Restartable Execution}: An event may interrupt a user-level process at any point, between any instruction and the next one. The OS must be able to restore the state of the user program exactly as it was before it was interrupted, so that to the user process, the interrupt is ``invisible'' /transparent and continues executing as if nothing happened.
+\end{itemize}
+Lets now describe the hardware/software mechanism for handling an interrupt, processor exception, or system call.
+
+
+
+\newpage
+
 
 \hrule
 
@@ -209,14 +256,67 @@ The buttom line of an OS is \textbf{to run programs}. Here is how they are run:
 \newpage
 \lecture[09/05/24]{Abstractions 1: Threads and Processess A quick, programmer's viewpoint}
 
+\subsection{The Thread Abstraction}
 \begin{definition}[Thread]
-    A single unique execution context. It provides the abstraction of: a single execution sequence that represents a separately schedule task. Threads are mechanism for concurrency.
+    A thread is a \textit{single execution sequence} that represents a \textit{separately schedulable task.}
+
+    Let us be a explain what these words mean:
+    \begin{itemize}
+        \item \textbf{Single Execution Sequence:} Each thread executes a sequence of instructions --- assignments, conditionals, loops, procedures, and so on --- just as in the familiar sequential programming model.
+        \item \textbf{Separately Schedulable Task:} The operating system can run, susped, or resume a thread at any time.
+    \end{itemize}
+    Threads let us define a set of tasks that run \textbf{concurrently} while the code for each task is sequential. Threads are mechanism for concurrency.
+\end{definition}
+Each thread behaves as if it has its own dedicated processor (it's a virtual processor). In reality ofcourse, a machine only has a finite number of professors and it is the OS job to transparently \textbf{multiplex} threads onto the actual processors.
+
+The thread abstraction lets the programmer create as many threads as needed without worrying about the exact number of physical processors, or exactly which processor is doing what at each instant.
+
+The code being executed within each thread is unaware when the OS switches between threads. This abstractions makes each thread appear to be a single stream of execution; this means the programmer can pay attention to the sequence of instructions within a thread and not whether or when that sequence may be suspended to let another thread run.
+
+Threads thus provide an execution model in which \textit{each thread runs on a dedicated virtual processor with unpredictable and variable speed}. It is as if the thread were running on a processor that sometimes becomes very slow.
+
+\subsubsection{Running, Suspending, and Resuming Threads}
+Threads provide the illusion of an infinite number of processors. How does the OS implement this illusion? It must execute instructions from each thread so that each thread makes progress, but the underlying hardware has only a limited number of processors.
+
+To map an arbitrary set of threads to a fixed set of processors, OS include a \textit{\textbf{thread scheduler}} that can switch between threads that are running and those that are ready but not running.
+
+\begin{example}[Threads Vs. Processes]
+    As we described in previous lectures, a process is an execution of a program with restricted rights. A thread is an independent \textbf{sequence of instructions} running within a program.
+\end{example}
+
+\subsection{Simple Thread API}
+
+\begin{figure}[h]
+    \centering
+    \begin{tabular}{|l|p{10cm}|}
+        \hline % chktex 44
+        \texttt{void thread\_create(thread, func, arg)} & Create a new thread, storing information about it in \texttt{thread}. Concurrently with the calling thread, \texttt{thread} executes the function \texttt{func} with the argument \texttt{arg}.                  \\
+        \hline % chktex 44
+        \texttt{void thread\_yield()}                   & The calling thread voluntarily gives up the processor to let some other thread(s) run. The scheduler can resume running the calling thread whenever it chooses to do so.                                         \\
+        \hline % chktex 44 
+        \texttt{int thread\_join(thread)}               & Wait for \texttt{thread} to finish if it has not already done so; then return the value passed to \texttt{thread\_exit} by that thread. Note that \texttt{thread\_join} may be called only once for each thread. \\
+        \hline % chktex 44
+        \texttt{void thread\_exit(ret)}                 & Finish the current thread. Store the value \texttt{ret} in the current thread’s data structure. If another thread is already waiting in a call to \texttt{thread\_join}, resume it.                              \\
+        \hline % chktex 44
+    \end{tabular}
+    \caption{Simplified API for using threads.}
+    \label{fig:thread_api}
+\end{figure}
+
+Figure \ref{fig:thread_api} shows a simple API for using threads and is based on the POSIX standard pthreads API.
+
+A good way to understand the simple threads API is that it provides a way to invoke an \textit{asynchronous procedure call.} A normal procedure call passes a set of args to a function, runs the function immediately on the caller's stack, and when the function is completed, returns control back to the caller with the result. An asynchronous procedure call separates the call from the return, allowing the caller to continue running while the function runs in the background. With \texttt{thread\_create}, the caller starts the function, but unlike a normal procedure call, the caller continues execution concurrently with the called function. Later, the caller can wait for the function to complete with \texttt{thread\_join}.
+
+\begin{definition}[Asynchronous Procedure Call]
+    An \textit{Asynchronous Procedure Call (APC)} is a mechanism by which a function or task is executed asynchronously, meaning it runs separately from the main thread of execution. This allows the main program to continue running while the procedure runs in the background, without blocking or waiting for the procedure to complete. APCs are typically used in multitasking environments to improve responsiveness and efficiency by allowing multiple tasks to execute concurrently.
 \end{definition}
 
-Concurreny is about handling multiple things at once, it's not parallelism. Parallesim is about doing multiple things at once.
+{\color{red} LEFT AT 4.4 TO READ ON SYNCHRONIZATION}
+
+
 
 \newpage
-\lecture[09/10/24]{Abstractions 2: Processes, Files and I/O}
+\lecture[09/10/24] {Abstractions 2: Processes, Files and I/O}
 There are 3 types of Kernel Mode Transfers.
 
 \begin{enumerate}
@@ -227,6 +327,97 @@ There are 3 types of Kernel Mode Transfers.
 
 \subsubsection{Creating Processes}
 
+\newpage
 
+\lecture[09/12/24]{Abstractions 3: Files and I/O (cont'd), Sockets and IPC}
+
+\lecture[09/17/24]{Abstractions 4: Sockets, I/O, and IPC}
+\lecture[09/19/24]{Concurrency, Mutal Exclusion, and Atoc Operations}
+Most multi-threaded programs have both \textit{per-thread state} (e.g., a thread's stack and registers) and a \textit{shared state} (e.g., global variables, heap memory, and file descriptors). \textbf{\textit{Cooperating threads}} read and write shared state.
+
+\subsection{Challenges}
+The core challenge of multi-threaded programming is that the program's execution depends on the interleavings of different threads' access to shared memory, which can make it difficult to reason about or debug these problems because there is a combinatorial explosion in the number of possible interleavings as the program grows.
+
+\subsubsection{Race Conditions}
+In particular, cooperating thread's execution may be affected by \textbf{\textit{race conditions}}.
+\begin{definition}[Race Condition]
+    A race condition occurs when the behavior of a program depends on the interleaving of operations of different threads. In effect, the threads run a race between their operations, and the results of the program execution depends on who wins the race.
+\end{definition}
+
+\begin{example}[a race condition]
+    Suppose that initially \( x = 0 \) and we run a program with two threads that do the following:
+
+    \begin{center}
+        \begin{tabular}{c c}
+            \textbf{Thread A} & \textbf{Thread B} \\
+            $x = x + 1;$      & $x = x + 2;$      \\
+        \end{tabular}
+    \end{center}
+
+    \noindent
+    \textbf{Question:} What are the possible final values of \( x \)?
+
+    \noindent
+    \textbf{Answer:} Obviously, \textbf{one possible outcome is \( x = 3 \)}. For example, Thread A runs to completion and then Thread B starts and runs to completion. However, \textbf{we can also get \( x = 2 \) or \( x = 1 \)}. In particular, when we write a single statement like \( x = x + 1 \), compilers on many processors produce multiple instructions, such as:
+    \begin{enumerate}
+        \item Load memory location \( x \) into a register.
+        \item Add 1 to that register.
+        \item Store the result to memory location \( x \).
+    \end{enumerate}
+    If we disassemble the above program into simple pseudo-assembly code, we can see some of the possibilities.
+
+
+    \begin{center}
+        \begin{tabular}{|c|c|c|}
+            \hline
+            \textbf{Final Value: x == 3} & \textbf{Final Value: x == 2} & \textbf{Final Value: x == } \\
+            \begin{tabular}{l l}
+                \textbf{Thread A} & \textbf{Thread B} \\
+                \hline
+                load r1, x        &                   \\
+                add r2, r1, 1     &                   \\
+                store x, r2       &                   \\
+                                  & load r1, x        \\
+                                  & add r2, r1, 2     \\
+                                  & store x, r2       \\
+            \end{tabular}
+                                         &
+            \begin{tabular}{l l}
+                \textbf{Thread A} & \textbf{Thread B} \\
+                \hline
+                load r1, x        &                   \\
+                                  & load r1, x        \\
+                add r2, r1, 1     &                   \\
+                                  & add r2, r1, 2     \\
+                store x, r2       &                   \\
+                                  & store x, r2       \\
+            \end{tabular}
+                                         &
+            \begin{tabular}{l l}
+                \textbf{Thread A} & \textbf{Thread B} \\
+                \hline
+                load r1, x        &                   \\
+                                  & load r1, x        \\
+                add r2, r1, 1     &                   \\
+                                  & add r2, r1, 2     \\
+                                  & store x, r2       \\
+                store x, r2       &                   \\
+            \end{tabular}                                                     \\
+            \hline
+        \end{tabular}
+    \end{center}
+\end{example}
+
+Not only would one have to reason about all possible interleavings of statements, but one would also have to disassemble the program and reason about all possible interleavings of assembly instructions (And if the compiler and hardware can reorder instructions, then there are even more possibilities to consider).
+
+\subsubsection{Atomic Operations}
+\begin{definition}[Atomic Operations]
+    An atomic operation is an indivisible operation that cannot be interleaved with or split by other operations. In other words, an atomic operation is a single operation that appears to occur instantaneously from the perspective of other threads.
+\end{definition}
+
+\subsection{Structured Shared Objects}
+\begin{definition}[Shared Objects]
+    Shared objects are objects that can be accessed safely by multiple threads. All shared state in a program --- including variables allocated on the heap and static, global variables --- should be encapsulated in one or more shared objects.
+\end{definition}
 
 \end{document}
